@@ -151,8 +151,30 @@ def parse_lid_ds_2021(input_dir):
         for subfolder in ['training', 'test', 'validation']:
             subfolder_path = scenario_dir / subfolder
             if subfolder_path.exists():
+                # First, look for direct log files
                 for pattern in ['*.log', 'audit*', '*.audit']:
                     audit_files.extend(list(subfolder_path.rglob(pattern)))
+                
+                # Also check for nested ZIP files that might contain logs
+                zip_files = list(subfolder_path.glob("*.zip"))
+                if zip_files:
+                    print(f"  Found {len(zip_files)} ZIP file(s) in {subfolder}, extracting...")
+                    # Extract ZIP files to temp directory
+                    import tempfile
+                    import zipfile
+                    temp_dir = Path(tempfile.mkdtemp())
+                    
+                    for zip_file in zip_files[:20]:  # Limit to first 20 ZIPs per folder
+                        try:
+                            with zipfile.ZipFile(zip_file, 'r') as zf:
+                                zf.extractall(temp_dir / zip_file.stem)
+                            
+                            # Look for logs in extracted ZIP
+                            for pattern in ['*.log', 'audit*', '*.audit', '*.json']:
+                                audit_files.extend(list((temp_dir / zip_file.stem).rglob(pattern)))
+                        except Exception as e:
+                            print(f"    Warning: Could not extract {zip_file.name}: {e}")
+                            continue
         
         # If no subfolders, look directly in scenario directory
         if not audit_files:
@@ -168,16 +190,73 @@ def parse_lid_ds_2021(input_dir):
         for log_file in audit_files[:10]:  # Limit to first 10 files per scenario
             try:
                 print(f"    Parsing {log_file.name}...")
-                with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
-                    line_count = 0
-                    for line in f:
-                        line = line.strip()
-                        if not line or line.startswith('#'):
-                            continue
-                        
-                        # Parse auditd log line
-                        # Format: type=PATH msg=audit(...): item=0 name="..." ...
-                        if 'type=PATH' in line or 'type=SYSCALL' in line:
+                
+                # Check if it's a JSON file
+                if log_file.suffix == '.json':
+                    import json
+                    try:
+                        with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                            json_data = json.load(f)
+                            
+                            # LID-DS JSON format: usually contains system calls or audit events
+                            # Try to extract events from JSON structure
+                            if isinstance(json_data, list):
+                                for item in json_data[:500]:  # Limit per JSON file
+                                    if isinstance(item, dict):
+                                        # Extract from JSON structure
+                                        filepath = item.get('path', item.get('filepath', item.get('name', '')))
+                                        process = item.get('process', item.get('comm', item.get('exe', '')))
+                                        user = str(item.get('uid', item.get('auid', '0')))
+                                        action = item.get('action', item.get('type', 'write'))
+                                        
+                                        event = {
+                                            'event_type': 'file_integrity',
+                                            'action': action,
+                                            'filepath': filepath,
+                                            'process': process,
+                                            'user': user,
+                                            'label': 'malicious' if is_attack else 'benign'
+                                        }
+                                        events.append(event)
+                            elif isinstance(json_data, dict):
+                                # Single JSON object or nested structure
+                                # Try to find events array
+                                events_list = json_data.get('events', json_data.get('data', []))
+                                if isinstance(events_list, list):
+                                    for item in events_list[:500]:
+                                        if isinstance(item, dict):
+                                            filepath = item.get('path', item.get('filepath', item.get('name', '')))
+                                            process = item.get('process', item.get('comm', item.get('exe', '')))
+                                            user = str(item.get('uid', item.get('auid', '0')))
+                                            action = item.get('action', item.get('type', 'write'))
+                                            
+                                            event = {
+                                                'event_type': 'file_integrity',
+                                                'action': action,
+                                                'filepath': filepath,
+                                                'process': process,
+                                                'user': user,
+                                                'label': 'malicious' if is_attack else 'benign'
+                                            }
+                                            events.append(event)
+                    except json.JSONDecodeError:
+                        print(f"      Warning: {log_file.name} is not valid JSON, skipping...")
+                        continue
+                    except Exception as e:
+                        print(f"      Warning: Error parsing JSON {log_file.name}: {e}")
+                        continue
+                else:
+                    # Regular log file (auditd format)
+                    with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                        line_count = 0
+                        for line in f:
+                            line = line.strip()
+                            if not line or line.startswith('#'):
+                                continue
+                            
+                            # Parse auditd log line
+                            # Format: type=PATH msg=audit(...): item=0 name="..." ...
+                            if 'type=PATH' in line or 'type=SYSCALL' in line:
                             # Extract file path
                             name_match = re.search(r'name="([^"]+)"', line)
                             filepath = name_match.group(1) if name_match else ''
