@@ -161,10 +161,11 @@ class HIDSMLClassifier:
             # Calculate detailed metrics
             self.performance_metrics = self._calculate_metrics(y_test, ensemble_predictions)
             
-            # Save models
-            self._save_model()
-            
+            # Mark as trained BEFORE saving
             self.is_trained = True
+            
+            # Save models (now with is_trained=True)
+            self._save_model()
             
             return {
                 'success': True,
