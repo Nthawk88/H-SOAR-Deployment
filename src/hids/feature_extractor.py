@@ -230,10 +230,12 @@ class HIDSFeatureExtractor:
             return 5
         elif '/var/www/' in filepath:
             return 4
+        elif '/home/' in filepath:
+            return 2  # Home directory - lower criticality
         elif '/tmp/' in filepath or '/var/tmp/' in filepath:
             return 1
         else:
-            return 3
+            return 2  # Default to lower criticality for unknown paths
     
     def _is_suspicious_filepath(self, filepath: str) -> int:
         """Check if file path is suspicious"""
@@ -333,21 +335,23 @@ class HIDSFeatureExtractor:
     def _encode_action(self, action: str) -> int:
         """Encode action as integer"""
         action_mapping = {
-            'open': 1,
-            'write': 2,
-            'delete': 3,
-            'execute': 4,
-            'chmod': 5,
-            'chown': 6,
-            'rename': 7,
-            'truncate': 8,
-            'bind': 9,
-            'connect': 10,
-            'setuid': 11,
-            'setgid': 12,
+            'read': 1,      # Read operation (same as open for file operations)
+            'open': 1,     # Open file
+            'write': 2,    # Write operation
+            'delete': 3,   # Delete operation
+            'execute': 4,  # Execute operation
+            'chmod': 5,    # Change mode
+            'chown': 6,    # Change owner
+            'rename': 7,   # Rename operation
+            'truncate': 8, # Truncate file
+            'bind': 9,     # Network bind
+            'connect': 10, # Network connect
+            'setuid': 11,  # Set user ID
+            'setgid': 12,  # Set group ID
+            'close': 1,    # Close file (same as read/open)
             'unknown': 0
         }
-        return action_mapping.get(action, 0)
+        return action_mapping.get(action.lower() if action else 'unknown', 0)
     
     def get_feature_names(self) -> List[str]:
         """Get list of feature names"""
