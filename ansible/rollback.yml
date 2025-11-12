@@ -1,0 +1,163 @@
+---
+# Smart Rollback Playbook untuk IDS/IPS Auto-Healing
+# Memulihkan sistem ke state aman setelah serangan nol-hari
+
+- name: Smart Rollback untuk Pemulihan Sistem
+  hosts: localhost
+  become: yes
+  vars:
+    backup_dir: "/opt/ids_backup"
+    quarantine_dir: "/tmp/quarantine"
+    critical_files:
+      - "/etc/passwd"
+      - "/etc/shadow"
+      - "/etc/hosts"
+      - "/etc/firewall/rules"
+      - "/etc/ssh/sshd_config"
+      - "/etc/suricata/suricata.yaml"
+    
+  tasks:
+    - name: Log dimulainya rollback
+      lineinfile:
+        path: /var/log/ids_rollback.log
+        line: "{{ ansible_date_time.iso8601 }} - Rollback dimulai"
+        create: yes
+      tags: [logging]
+
+    - name: Stop semua layanan kritis
+      systemd:
+        name: "{{ item }}"
+        state: stopped
+      loop:
+        - suricata
+        - fail2ban
+        - ufw
+      ignore_errors: yes
+      tags: [services]
+
+    - name: Backup konfigurasi saat ini sebelum rollback
+      copy:
+        src: "{{ item }}"
+        dest: "{{ backup_dir }}/current/{{ ansible_date_time.epoch }}/"
+        remote_src: yes
+      loop: "{{ critical_files }}"
+      ignore_errors: yes
+      tags: [backup]
+
+    - name: Restore file kritis dari backup terbaru
+      copy:
+        src: "{{ backup_dir }}/latest/{{ item | basename }}"
+        dest: "{{ item }}"
+        backup: yes
+        owner: root
+        group: root
+        mode: '0600'
+      loop: "{{ critical_files }}"
+      when: backup_dir + "/latest/" + (item | basename) is file
+      tags: [restore]
+
+    - name: Restore file dari quarantine jika ada
+      copy:
+        src: "{{ quarantine_dir }}/{{ item | basename }}_{{ ansible_date_time.epoch }}"
+        dest: "{{ item }}"
+        backup: yes
+        owner: root
+        group: root
+        mode: '0600'
+      loop: "{{ critical_files }}"
+      when: quarantine_dir + "/" + (item | basename) + "_" + ansible_date_time.epoch is file
+      ignore_errors: yes
+      tags: [quarantine_restore]
+
+    - name: Reset iptables ke konfigurasi default
+      iptables:
+        flush: yes
+      tags: [network]
+
+    - name: Restore iptables rules default
+      iptables:
+        chain: INPUT
+        policy: ACCEPT
+      tags: [network]
+
+    - name: Restore iptables rules default
+      iptables:
+        chain: FORWARD
+        policy: ACCEPT
+      tags: [network]
+
+    - name: Restore iptables rules default
+      iptables:
+        chain: OUTPUT
+        policy: ACCEPT
+      tags: [network]
+
+    - name: Load iptables rules dari file backup
+      command: iptables-restore {{ backup_dir }}/latest/iptables.rules
+      when: backup_dir + "/latest/iptables.rules" is file
+      ignore_errors: yes
+      tags: [network]
+
+    - name: Kill proses mencurigakan yang masih berjalan
+      shell: |
+        pkill -f "nc|netcat|ncat"
+        pkill -f "wget.*http"
+        pkill -f "curl.*http"
+      ignore_errors: yes
+      tags: [processes]
+
+    - name: Restart layanan kritis
+      systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      loop:
+        - suricata
+        - fail2ban
+        - ufw
+      tags: [services]
+
+    - name: Verifikasi status layanan
+      systemd:
+        name: "{{ item }}"
+      register: service_status
+      loop:
+        - suricata
+        - fail2ban
+        - ufw
+      tags: [verification]
+
+    - name: Log status layanan
+      lineinfile:
+        path: /var/log/ids_rollback.log
+        line: "{{ ansible_date_time.iso8601 }} - {{ item.item }}: {{ item.status.ActiveState }}"
+      loop: "{{ service_status.results }}"
+      tags: [logging]
+
+    - name: Generate laporan rollback
+      template:
+        src: rollback_report.j2
+        dest: "{{ backup_dir }}/rollback_report_{{ ansible_date_time.epoch }}.txt"
+      tags: [reporting]
+
+    - name: Log selesainya rollback
+      lineinfile:
+        path: /var/log/ids_rollback.log
+        line: "{{ ansible_date_time.iso8601 }} - Rollback selesai"
+      tags: [logging]
+
+    - name: Notifikasi rollback selesai
+      mail:
+        to: "admin@company.com"
+        subject: "IDS/IPS Rollback Completed"
+        body: |
+          Rollback telah selesai pada {{ ansible_date_time.iso8601 }}
+          
+          File yang dipulihkan:
+          {% for file in critical_files %}
+          - {{ file }}
+          {% endfor %}
+          
+          Laporan lengkap tersedia di: {{ backup_dir }}/rollback_report_{{ ansible_date_time.epoch }}.txt
+      when: rollback_notification is defined and rollback_notification
+      tags: [notification]

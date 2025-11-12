@@ -1,0 +1,33 @@
+{
+  "suspicious_process_names": [
+    "nc", "netcat", "ncat", "mimikatz", "mshta", "wget", "curl", "powershell"
+  ],
+  "process_allowlist_prefixes": [
+    "onedrive.", "onedrive.sync.", "filesynchelper", "shellexperiencehost",
+    "startexperiencehost", "startmenuexperiencehost", "phoneexperiencehost"
+  ],
+  "critical_files": [
+    "/etc/passwd", "/etc/hosts", "C:/Windows/System32/drivers/etc/hosts"
+  ],
+  "port_scan_min_unique_ports": 50,
+  "ddos_min_total_events": 1000,
+  "ddos_min_foreign_connections": 50,
+  "suspicious_dns_patterns": [
+    "Suspicious DNS query", "DNS tunnel", "base64"
+  ],
+  "high_outbound_connections": 30,
+  "high_remote_high_port_count": 20,
+  "severity_weights": {
+    "process": 2,
+    "file": 3,
+    "network": 2,
+    "dns": 2
+  },
+  "severity_thresholds": {
+    "LOW": 2,
+    "MEDIUM": 4,
+    "HIGH": 6,
+    "CRITICAL": 8
+  }
+}
+

@@ -1,0 +1,37 @@
+{
+  "danger_signal_timeout": 10,
+  "anomaly_score_threshold": 80.0,
+  "validation_window": 30,
+  "high_confidence_threshold": 90.0,
+  "medium_confidence_threshold": 70.0,
+  "danger_signals": {
+    "critical_file_modification": {
+      "weight": 0.4,
+      "files": [
+        "/etc/passwd",
+        "/etc/shadow",
+        "/etc/hosts"
+      ]
+    },
+    "high_resource_usage": {
+      "weight": 0.3,
+      "cpu_threshold": 95.0,
+      "memory_threshold": 95.0
+    },
+    "suspicious_process": {
+      "weight": 0.2,
+      "processes": [
+        "nc",
+        "netcat",
+        "ncat",
+        "wget",
+        "curl"
+      ]
+    },
+    "network_anomaly": {
+      "weight": 0.1,
+      "foreign_connection_threshold": 20,
+      "port_scan_threshold": 10
+    }
+  }
+}

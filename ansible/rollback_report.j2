@@ -1,0 +1,35 @@
+# Laporan Smart Rollback IDS/IPS Auto-Healing
+# Tanggal: {{ ansible_date_time.iso8601 }}
+
+## Ringkasan Rollback
+- **Waktu Mulai**: {{ ansible_date_time.iso8601 }}
+- **Host Target**: {{ inventory_hostname }}
+- **Status**: Selesai
+
+## File yang Dipulihkan
+{% for file in critical_files %}
+- {{ file }}
+  - Status: {% if backup_dir + "/latest/" + (file | basename) is file %}Dipulihkan dari backup{% else %}Tidak ada backup tersedia{% endif %}
+{% endfor %}
+
+## Layanan yang Di-restart
+- suricata: {% if service_status.results[0].status.ActiveState is defined %}{{ service_status.results[0].status.ActiveState }}{% else %}Unknown{% endif %}
+- fail2ban: {% if service_status.results[1].status.ActiveState is defined %}{{ service_status.results[1].status.ActiveState }}{% else %}Unknown{% endif %}
+- ufw: {% if service_status.results[2].status.ActiveState is defined %}{{ service_status.results[2].status.ActiveState }}{% else %}Unknown{% endif %}
+
+## Tindakan yang Dilakukan
+1. Backup konfigurasi saat ini
+2. Restore file kritis dari backup terbaru
+3. Reset iptables ke konfigurasi default
+4. Kill proses mencurigakan
+5. Restart layanan kritis
+6. Verifikasi status sistem
+
+## Rekomendasi
+- Monitor sistem selama 24 jam ke depan
+- Periksa log untuk aktivitas mencurigakan
+- Update signature Suricata jika diperlukan
+- Pertimbangkan untuk mengupdate model ML dengan data serangan ini
+
+## Kontak
+Jika ada masalah dengan rollback, hubungi tim keamanan IT.

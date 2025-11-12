@@ -1,0 +1,137 @@
+{
+  "monitoring_interval": 30,
+  "anomaly_threshold": 65.0,
+  "auto_containment": true,
+  "learning_enabled": true,
+  "log_level": "INFO",
+  "eve_log_path": "/var/log/suricata/eve.json",
+  "backup_enabled": true,
+  "rollback_notification": true,
+  "performance_evaluation": true,
+  "xai_enabled": true,
+  "self_learning_threshold": 10,
+  "containment_timeout": 300,
+  "learning_data_retention_days": 30,
+  "monitoring": {
+    "enabled": true,
+    "interval": 30
+  },
+  "detection": {
+    "enabled": true,
+    "threshold": 65.0
+  },
+  "containment": {
+    "enabled": true,
+    "auto_trigger": true
+  },
+  "performance_alerts_enabled": false,
+  "async_config": {
+    "max_workers": 8,
+    "max_process_workers": 4,
+    "batch_size": 10,
+    "timeout": 30.0,
+    "retry_attempts": 2,
+    "cache_ttl": 300,
+    "interval_multiplier": 2.0,
+    "min_interval": 5,
+    "max_interval": 300,
+    "load_balancing_enabled": true
+  },
+  "cache_config": {
+    "max_size": 1000,
+    "max_memory": 104857600,
+    "default_ttl": 300,
+    "cleanup_interval": 60,
+    "adaptive_enabled": true,
+    "popularity_threshold": 5
+  },
+  "interval_config": {
+    "base_interval": 30.0,
+    "min_interval": 5.0,
+    "max_interval": 300.0,
+    "adjustment_step": 0.1,
+    "smooth_transition": true,
+    "learning_enabled": true,
+    "performance_threshold": 0.8,
+    "stability_window": 10
+  },
+  "inference_config": {
+    "max_workers": 8,
+    "max_process_workers": 4,
+    "batch_size": 10,
+    "timeout": 30.0,
+    "retry_attempts": 2,
+    "load_balancing_enabled": true
+  },
+  "lstm_config": {
+    "sequence_length": 60,
+    "feature_count": 10,
+    "hidden_units": 50,
+    "dropout_rate": 0.2,
+    "learning_rate": 0.001,
+    "batch_size": 32,
+    "epochs": 100,
+    "validation_split": 0.2,
+    "model_type": "autoencoder",
+    "use_bidirectional": true,
+    "use_attention": false,
+    "anomaly_threshold": 0.1,
+    "threshold_percentile": 95,
+    "min_samples_for_training": 1000,
+    "retraining_enabled": true,
+    "retraining_interval": 3600
+  },
+  "security_features": {
+    "fim_enabled": true,
+    "suricata_ingest_enabled": true,
+    "fim_paths": [
+      "/etc/passwd",
+      "/etc/hosts",
+      "C:/Windows/System32/drivers/etc/hosts"
+    ],
+    "fim_baseline_path": "learning_data/signatures/fim_baseline.json",
+    "suricata_eve_path": "/var/log/suricata/eve.json",
+    "suricata_max_events": 500
+  },
+  "ai_security": {
+    "enabled": true,
+    "model_path": "models/security_iforest.pkl",
+    "baseline_days": 7,
+    "baseline_min_samples": 60,
+    "window_seconds": 120,
+    "threshold": 0.90,
+    "ensemble_enabled": true,
+    "ensemble_models": {
+      "isolation_forest": {
+        "enabled": true,
+        "weight": 0.35,
+        "threshold": 0.90
+      },
+      "one_class_svm": {
+        "enabled": true,
+        "weight": 0.25,
+        "threshold": 0.85
+      },
+      "local_outlier_factor": {
+        "enabled": true,
+        "weight": 0.20,
+        "threshold": 0.80
+      },
+      "elliptic_envelope": {
+        "enabled": true,
+        "weight": 0.20,
+        "threshold": 0.85
+      }
+    },
+    "ensemble_threshold": 0.80,
+    "calibration_enabled": true,
+    "adaptive_calibration": true,
+    "max_history_size": 1000,
+    "model_paths": {
+      "isolation_forest": "models/security_isolation_forest.pkl",
+      "one_class_svm": "models/security_one_class_svm.pkl",
+      "local_outlier_factor": "models/security_local_outlier_factor.pkl",
+      "elliptic_envelope": "models/security_elliptic_envelope.pkl"
+    }
+  }
+}

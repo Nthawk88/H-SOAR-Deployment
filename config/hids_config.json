@@ -1,0 +1,99 @@
+{
+  "fim": {
+    "enabled": true,
+    "monitor_paths": [
+      "/etc",
+      "/bin",
+      "/sbin",
+      "/usr/bin",
+      "/var/www/html"
+    ],
+    "exclude_patterns": [
+      "*.log",
+      "*.tmp",
+      "/tmp/*",
+      "*.swp",
+      "*.bak"
+    ],
+    "check_interval": 5,
+    "baseline_update_interval": 3600
+  },
+  "auditd": {
+    "enabled": true,
+    "rules_file": "/etc/audit/rules.d/hids.rules",
+    "log_file": "/var/log/audit/audit.log",
+    "collection_interval": 1,
+    "max_events_per_cycle": 100
+  },
+  "features": {
+    "filepath_criticality": true,
+    "process_analysis": true,
+    "user_context": true,
+    "file_attributes": true,
+    "temporal_features": true,
+    "network_context": true
+  },
+  "ml": {
+    "model_type": "ensemble",
+    "models": [
+      "random_forest",
+      "gradient_boosting",
+      "svm"
+    ],
+    "training_data_path": "data/training_dataset.csv",
+    "model_save_path": "models/hids_classifier.pkl",
+    "cross_validation_folds": 5,
+    "test_size": 0.2,
+    "random_state": 42
+  },
+  "rollback": {
+    "enabled": true,
+    "git_repos": {
+      "/etc": "git@localhost:/etc.git",
+      "/var/www/html": "git@localhost:/var/www.git"
+    },
+    "auto_rollback": true,
+    "rollback_threshold": 0.8,
+    "backup_enabled": true,
+    "backup_retention_days": 30
+  },
+  "triage": {
+    "enabled": true,
+    "alert_categories": [
+      "benign",
+      "suspicious",
+      "malicious"
+    ],
+    "auto_response": true,
+    "response_threshold": 0.9,
+    "alert_retention_days": 90
+  },
+  "dataset": {
+    "collection_enabled": false,
+    "output_path": "data/collected_events.csv",
+    "labeling_mode": "manual",
+    "collection_interval": 1,
+    "max_collection_duration_hours": 168
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "logs/hids.log",
+    "max_size_mb": 100,
+    "backup_count": 5,
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  },
+  "monitoring": {
+    "enabled": true,
+    "check_interval": 5,
+    "max_events_per_cycle": 100,
+    "alert_cooldown_seconds": 60,
+    "performance_monitoring": true
+  },
+  "security": {
+    "file_integrity_monitoring": true,
+    "process_monitoring": true,
+    "network_monitoring": true,
+    "privilege_escalation_monitoring": true,
+    "suspicious_pattern_detection": true
+  }
+}

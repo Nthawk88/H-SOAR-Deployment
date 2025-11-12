@@ -1,0 +1,17 @@
+{
+  "monitoring_interval": 5,
+  "cpu_threshold": 90.0,
+  "memory_threshold": 90.0,
+  "critical_files": [
+    "/etc/passwd",
+    "/etc/shadow",
+    "/etc/hosts",
+    "/etc/firewall/rules",
+    "/etc/ssh/sshd_config"
+  ],
+  "suspicious_processes": [
+    "nc", "netcat", "ncat",
+    "wget", "curl", "powershell",
+    "python", "perl", "bash"
+  ]
+}

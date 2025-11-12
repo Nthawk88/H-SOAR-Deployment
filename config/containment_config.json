@@ -1,0 +1,17 @@
+{
+  "isolation_enabled": true,
+  "network_isolation": true,
+  "process_killing": true,
+  "file_quarantine": true,
+  "backup_restore": true,
+  "iptables_rules": {
+    "block_all_outbound": "iptables -A OUTPUT -j DROP",
+    "block_specific_ip": "iptables -A OUTPUT -d {ip} -j DROP",
+    "allow_local": "iptables -A OUTPUT -d 127.0.0.1 -j ACCEPT",
+    "allow_dns": "iptables -A OUTPUT -p udp --dport 53 -j ACCEPT"
+  },
+  "critical_processes": [
+    "systemd", "kernel", "init", "sshd", "networkd"
+  ],
+  "quarantine_path": "/tmp/quarantine"
+}

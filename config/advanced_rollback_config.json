@@ -1,0 +1,120 @@
+{
+  "rollback_strategies": {
+    "immediate": {
+      "timeout": 30,
+      "retry_count": 3,
+      "retry_delay": 5,
+      "parallel_rollback": false,
+      "validation_required": true
+    },
+    "gradual": {
+      "timeout": 60,
+      "retry_count": 5,
+      "retry_delay": 10,
+      "parallel_rollback": true,
+      "validation_required": true
+    },
+    "emergency": {
+      "timeout": 15,
+      "retry_count": 1,
+      "retry_delay": 2,
+      "parallel_rollback": false,
+      "validation_required": false
+    },
+    "selective": {
+      "timeout": 45,
+      "retry_count": 4,
+      "retry_delay": 7,
+      "parallel_rollback": true,
+      "validation_required": true
+    }
+  },
+  "components": {
+    "network": {
+      "priority": 1,
+      "dependencies": [],
+      "rollback_method": "network_reset",
+      "backup_required": true,
+      "validation_method": "connectivity_test"
+    },
+    "services": {
+      "priority": 2,
+      "dependencies": [
+        "network"
+      ],
+      "rollback_method": "service_restart",
+      "backup_required": true,
+      "validation_method": "service_status"
+    },
+    "files": {
+      "priority": 3,
+      "dependencies": [
+        "services"
+      ],
+      "rollback_method": "file_restore",
+      "backup_required": true,
+      "validation_method": "file_integrity"
+    },
+    "processes": {
+      "priority": 4,
+      "dependencies": [
+        "files"
+      ],
+      "rollback_method": "process_termination",
+      "backup_required": false,
+      "validation_method": "process_check"
+    },
+    "configurations": {
+      "priority": 5,
+      "dependencies": [
+        "processes"
+      ],
+      "rollback_method": "config_restore",
+      "backup_required": true,
+      "validation_method": "config_validation"
+    }
+  },
+  "monitoring": {
+    "enabled": true,
+    "interval": 1,
+    "metrics_retention_days": 30,
+    "real_time_alerts": true,
+    "performance_tracking": true
+  },
+  "security": {
+    "authentication_required": false,
+    "authorization_enabled": false,
+    "audit_logging": true,
+    "integrity_check": true,
+    "encryption_enabled": false
+  },
+  "performance": {
+    "max_concurrent_rollbacks": 3,
+    "rollback_timeout_multiplier": 1.5,
+    "resource_monitoring": true,
+    "performance_thresholds": {
+      "max_cpu_usage": 80.0,
+      "max_memory_usage": 85.0,
+      "max_disk_usage": 90.0
+    }
+  },
+  "backup": {
+    "enabled": true,
+    "backup_interval": 300,
+    "retention_days": 7,
+    "compression_enabled": true,
+    "encryption_enabled": false,
+    "backup_locations": [
+      "backups/system_state",
+      "backups/configurations",
+      "backups/critical_files"
+    ]
+  },
+  "error_handling": {
+    "max_retry_attempts": 3,
+    "retry_backoff_factor": 2,
+    "circuit_breaker_enabled": true,
+    "fallback_strategy": "emergency",
+    "error_notification": true
+  }
+}
