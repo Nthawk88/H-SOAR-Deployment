@@ -211,49 +211,44 @@ def parse_lid_ds_2021(input_dir):
                                     continue
                                 
                                 # Parse fields
+                                # Format: timestamp exit_code tid process_name pid syscall_name direction [parameters]
                                 # parts[0] = timestamp
                                 # parts[1] = exit_code
                                 # parts[2] = tid
                                 # parts[3] = process_name
                                 # parts[4] = pid
                                 # parts[5] = syscall_name
-                                # parts[6] = pid (duplicate)
-                                # parts[7] = direction (< or >)
-                                # parts[8:] = parameters
+                                # parts[6] = direction (< or >)
+                                # parts[7:] = parameters
                                 
                                 process_name = parts[3] if len(parts) > 3 else 'unknown'
                                 syscall_name = parts[5] if len(parts) > 5 else ''
-                                direction = parts[7] if len(parts) > 7 else ''
-                                
-                                # Debug: print first few lines to understand format
-                                if sc_count == 0:
-                                    print(f"        Debug - First line: {line[:100]}")
-                                    print(f"        Debug - Parts count: {len(parts)}, syscall: {syscall_name}, direction: {direction}")
+                                direction = parts[6] if len(parts) > 6 else ''
                                 
                                 # Only process syscall entries (direction '>' means syscall entry, '<' means return)
-                                # But we can also process returns if they have file info
-                                if not syscall_name:
-                                    continue
-                                
-                                # Process both entries (>) and returns (<) that have file operations
-                                if direction not in ['>', '<']:
+                                # Process returns (<) because they often contain file paths in parameters
+                                if not syscall_name or direction not in ['>', '<']:
                                     continue
                                 
                                 # Extract filepath from parameters if available
                                 filepath = ''
-                                params_str = ' '.join(parts[8:]) if len(parts) > 8 else ''
+                                params_str = ' '.join(parts[7:]) if len(parts) > 7 else ''
                                 
                                 # Look for name= parameter (file path)
-                                # Try different patterns
+                                # Format: name=/path/to/file or name="path"
                                 name_match = re.search(r'name=([^\s\)]+)', params_str)
                                 if name_match:
                                     filepath = name_match.group(1).strip('"\'')
                                 else:
-                                    # Try to find file path in other formats
-                                    # Look for patterns like /path/to/file
-                                    path_match = re.search(r'(/[^\s\)]+)', params_str)
-                                    if path_match:
-                                        filepath = path_match.group(1)
+                                    # Try to find file path in fd parameter: fd=13(<f>/path/to/file)
+                                    fd_match = re.search(r'fd=\d+\(<[^>]+>([^\)]+)\)', params_str)
+                                    if fd_match:
+                                        filepath = fd_match.group(1)
+                                    else:
+                                        # Try to find absolute path pattern
+                                        path_match = re.search(r'(/[^\s\)]+)', params_str)
+                                        if path_match:
+                                            filepath = path_match.group(1)
                                 
                                 # Map syscall to event type and action
                                 event_type = 'file_integrity'
@@ -266,9 +261,12 @@ def parse_lid_ds_2021(input_dir):
                                         filepath = '/bin/sh'
                                 elif syscall_name in ['open', 'openat', 'openat2']:
                                     event_type = 'file_integrity'
-                                    action = 'open'
-                                    if not filepath:
-                                        filepath = '/etc/passwd'
+                                    # For open syscalls, prefer return (<) which has name= parameter
+                                    if direction == '<' and not filepath:
+                                        # Try to extract from return value
+                                        filepath = '/etc/passwd'  # fallback
+                                    elif direction == '>' and not filepath:
+                                        filepath = '/etc/passwd'  # fallback
                                 elif syscall_name in ['write', 'pwrite', 'pwritev']:
                                     event_type = 'file_integrity'
                                     action = 'write'
@@ -279,11 +277,36 @@ def parse_lid_ds_2021(input_dir):
                                     action = 'delete'
                                     if not filepath:
                                         filepath = '/tmp/file'
-                                elif syscall_name in ['read', 'pread', 'preadv']:
+                                elif syscall_name in ['read', 'pread', 'preadv', 'readv']:
                                     event_type = 'file_integrity'
                                     action = 'read'
+                                    # Extract filepath from fd parameter if available
                                     if not filepath:
-                                        filepath = '/etc/passwd'
+                                        fd_match = re.search(r'fd=\d+\(<[^>]+>([^\)]+)\)', params_str)
+                                        if fd_match:
+                                            filepath = fd_match.group(1)
+                                        else:
+                                            filepath = '/etc/passwd'  # fallback
+                                elif syscall_name in ['write', 'pwrite', 'pwritev', 'writev']:
+                                    event_type = 'file_integrity'
+                                    action = 'write'
+                                    # Extract filepath from fd parameter if available
+                                    if not filepath:
+                                        fd_match = re.search(r'fd=\d+\(<[^>]+>([^\)]+)\)', params_str)
+                                        if fd_match:
+                                            filepath = fd_match.group(1)
+                                        else:
+                                            filepath = '/etc/passwd'  # fallback
+                                elif syscall_name in ['close']:
+                                    event_type = 'file_integrity'
+                                    action = 'close'
+                                    # Extract filepath from fd parameter
+                                    if not filepath:
+                                        fd_match = re.search(r'fd=\d+\(<[^>]+>([^\)]+)\)', params_str)
+                                        if fd_match:
+                                            filepath = fd_match.group(1)
+                                        else:
+                                            filepath = '/tmp/file'  # fallback
                                 else:
                                     # Skip other syscalls to focus on file/process operations
                                     continue
