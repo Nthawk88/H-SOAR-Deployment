@@ -6,6 +6,32 @@ Panduan untuk download dan convert dataset dari paper-paper penelitian yang suda
 
 ## 📚 Dataset yang Tersedia
 
+### 0. **ADFA-LD** (Easiest - GitHub) ⭐ Quick Start
+
+**Paper:** Creech & Hu, "A Semantic Approach to Host-based Intrusion Detection Systems using Contiguous and Discontinuous System Call Patterns", IEEE TIFS, 2014
+
+**Download:**
+- **URL:** https://github.com/verazuo/a-labelled-version-of-the-ADFA-LD-dataset
+- **Size:** ~100-200MB
+- **Format:** System call traces
+- **Keuntungan:** Direct download dari GitHub, tidak perlu registrasi
+
+**Cara Download:**
+```bash
+cd ~/hsoar/data/external
+git clone https://github.com/verazuo/a-labelled-version-of-the-ADFA-LD-dataset.git
+cd a-labelled-version-of-the-ADFA-LD-dataset
+unzip ADFA-LD.zip
+cd ../../..
+```
+
+**Convert:**
+```bash
+python scripts/convert_paper_dataset.py data/external/a-labelled-version-of-the-ADFA-LD-dataset/ADFA-LD data/training_dataset.csv
+```
+
+---
+
 ### 1. **LID-DS 2021** (Recommended - Direct Download)
 
 **Paper:** Martinez-Torres et al., "LID-DS: A Linux Intrusion Detection Dataset", Future Generation Computer Systems, 2022
@@ -193,8 +219,17 @@ head -20 data/external/lid_ds/*/audit.log
 
 ## 📚 References
 
-- **LID-DS 2021:** Martinez-Torres et al., "LID-DS: A Linux Intrusion Detection Dataset", Future Generation Computer Systems, 2022. DOI: 10.1016/j.future.2022.01.015
 - **ADFA-LD:** Creech & Hu, "A Semantic Approach to Host-based Intrusion Detection Systems using Contiguous and Discontinuous System Call Patterns", IEEE Transactions on Information Forensics and Security, 2014. DOI: 10.1109/TIFS.2014.2312812
+- **LID-DS 2021:** Martinez-Torres et al., "LID-DS: A Linux Intrusion Detection Dataset", Future Generation Computer Systems, 2022. DOI: 10.1016/j.future.2022.01.015
+- **LID-DS 2019:** FKIE-CAD, Fraunhofer Institute. Website: https://fkie-cad.github.io/COMIDDS/content/datasets/lids_ds_2019/
+- **UNSW-NB15:** Moustafa & Slay, "UNSW-NB15: A comprehensive data set for network intrusion detection systems", IEEE MILCOM, 2015
+- **CIC-IDS2017:** Sharafaldin et al., "Toward Generating a New Intrusion Detection Dataset and Intrusion Traffic Characterization", ICISSP, 2018
+
+---
+
+## 📖 Additional Datasets
+
+Untuk dataset tambahan lainnya, lihat: [`docs/ADDITIONAL_DATASETS.md`](ADDITIONAL_DATASETS.md)
 
 ---
 
