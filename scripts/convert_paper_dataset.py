@@ -243,12 +243,15 @@ def parse_adfa_ld(input_dir):
         print(f"Processing {dataset_type} ({label})...")
         
         # ADFA-LD contains system call traces (one syscall per line)
-        trace_files = list(dataset_path.glob("*"))
+        # Search recursively for .txt files (attack files are in subfolders)
+        trace_files = list(dataset_path.rglob("*.txt"))
         trace_files = [f for f in trace_files if f.is_file()]
         
         print(f"  Found {len(trace_files)} trace file(s)")
         
-        for trace_file in trace_files[:50]:  # Limit to first 50 files
+        # Process more files for better dataset coverage
+        max_files = 200 if label == 'malicious' else 100  # More attack samples
+        for trace_file in trace_files[:max_files]:
             try:
                 with open(trace_file, 'r', encoding='utf-8', errors='ignore') as f:
                     syscalls = []
