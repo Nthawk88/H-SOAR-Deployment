@@ -225,8 +225,18 @@ def parse_lid_ds_2021(input_dir):
                                 syscall_name = parts[5] if len(parts) > 5 else ''
                                 direction = parts[7] if len(parts) > 7 else ''
                                 
-                                # Only process syscall entries (not returns)
-                                if direction != '>' or not syscall_name:
+                                # Debug: print first few lines to understand format
+                                if sc_count == 0:
+                                    print(f"        Debug - First line: {line[:100]}")
+                                    print(f"        Debug - Parts count: {len(parts)}, syscall: {syscall_name}, direction: {direction}")
+                                
+                                # Only process syscall entries (direction '>' means syscall entry, '<' means return)
+                                # But we can also process returns if they have file info
+                                if not syscall_name:
+                                    continue
+                                
+                                # Process both entries (>) and returns (<) that have file operations
+                                if direction not in ['>', '<']:
                                     continue
                                 
                                 # Extract filepath from parameters if available
@@ -234,9 +244,16 @@ def parse_lid_ds_2021(input_dir):
                                 params_str = ' '.join(parts[8:]) if len(parts) > 8 else ''
                                 
                                 # Look for name= parameter (file path)
-                                name_match = re.search(r'name=([^\s]+)', params_str)
+                                # Try different patterns
+                                name_match = re.search(r'name=([^\s\)]+)', params_str)
                                 if name_match:
-                                    filepath = name_match.group(1)
+                                    filepath = name_match.group(1).strip('"\'')
+                                else:
+                                    # Try to find file path in other formats
+                                    # Look for patterns like /path/to/file
+                                    path_match = re.search(r'(/[^\s\)]+)', params_str)
+                                    if path_match:
+                                        filepath = path_match.group(1)
                                 
                                 # Map syscall to event type and action
                                 event_type = 'file_integrity'
