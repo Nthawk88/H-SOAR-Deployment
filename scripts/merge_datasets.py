@@ -75,17 +75,28 @@ def merge_datasets(input_files, output_file):
         merged_df = pd.concat(aligned_dataframes, ignore_index=True)
         initial_count = len(merged_df)
         
-        # Remove duplicates based on feature columns only (not label, to preserve different labels)
-        # Only remove if ALL feature values are identical
-        feature_columns = [col for col in merged_df.columns if col != 'label']
+        # Remove duplicates - but be more conservative
+        # Option 1: Don't remove duplicates at all (keep all samples)
+        # Option 2: Only remove if ALL columns (including label) are identical
+        # Option 3: Only remove duplicates within each original dataset, not cross-dataset
         
-        print(f"\nRemoving duplicates (checking {len(feature_columns)} feature columns)...")
-        merged_df = merged_df.drop_duplicates(subset=feature_columns, keep='first')
+        print(f"\nRemoving duplicates...")
+        print(f"  Strategy: Only remove rows that are identical in ALL columns (including label)")
+        print(f"  This preserves samples with same features but different labels")
+        
+        initial_count = len(merged_df)
+        # Only remove if EVERYTHING is identical (including label)
+        merged_df = merged_df.drop_duplicates(keep='first')
         duplicates_removed = initial_count - len(merged_df)
         
         print(f"  Initial samples: {initial_count}")
         print(f"  After deduplication: {len(merged_df)}")
         print(f"  Duplicates removed: {duplicates_removed}")
+        
+        if duplicates_removed > initial_count * 0.5:
+            print(f"\n  ⚠️  Warning: More than 50% of samples were removed as duplicates!")
+            print(f"  This suggests datasets may have many identical rows.")
+            print(f"  Consider checking the datasets with: python scripts/debug_merge.py <file1> <file2>")
         
         # Save merged dataset
         os.makedirs(os.path.dirname(output_file) if os.path.dirname(output_file) else '.', exist_ok=True)
