@@ -121,13 +121,16 @@ def parse_lid_ds_2021(input_dir):
     input_path = Path(input_dir)
     
     # LID-DS structure: scenarios with auditd logs
-    # Look for scenario directories
-    scenario_dirs = [d for d in input_path.iterdir() if d.is_dir() and not d.name.startswith('.')]
+    # Structure can be: CVE-XXXX/training/, CVE-XXXX/test/, CVE-XXXX/validation/
+    # Or: scenario_name/audit.log
+    
+    # Look for scenario directories (CVE-*, CWE-*, etc.)
+    scenario_dirs = [d for d in input_path.iterdir() if d.is_dir() and not d.name.startswith('.') and not d.name.startswith('__')]
     
     if not scenario_dirs:
         # Try nested structure
         for subdir in input_path.iterdir():
-            if subdir.is_dir():
+            if subdir.is_dir() and not subdir.name.startswith('.'):
                 scenario_dirs.extend([d for d in subdir.iterdir() if d.is_dir()])
     
     print(f"Found {len(scenario_dirs)} scenario(s)")
@@ -137,13 +140,24 @@ def parse_lid_ds_2021(input_dir):
         print(f"\nProcessing scenario: {scenario_name}")
         
         # Determine label based on scenario name
-        is_attack = any(keyword in scenario_name.lower() for keyword in 
-            ['attack', 'exploit', 'malware', 'intrusion', 'backdoor', 'shell'])
+        # CVE/CWE scenarios are attacks
+        is_attack = any(keyword in scenario_name.upper() for keyword in 
+            ['CVE-', 'CWE-', 'ATTACK', 'EXPLOIT', 'MALWARE', 'INTRUSION', 'BACKDOOR', 'SHELL', 'BRUTEFORCE', 'SQL', 'INJECTION'])
         
-        # Look for auditd logs
+        # Look for auditd logs in training/test/validation folders
         audit_files = []
-        for pattern in ['*.log', 'audit*', '*.audit', '**/audit.log', '**/*audit*']:
-            audit_files.extend(list(scenario_dir.rglob(pattern)))
+        
+        # Check for training/test/validation subfolders (LID-DS 2021 structure)
+        for subfolder in ['training', 'test', 'validation']:
+            subfolder_path = scenario_dir / subfolder
+            if subfolder_path.exists():
+                for pattern in ['*.log', 'audit*', '*.audit']:
+                    audit_files.extend(list(subfolder_path.rglob(pattern)))
+        
+        # If no subfolders, look directly in scenario directory
+        if not audit_files:
+            for pattern in ['*.log', 'audit*', '*.audit', '**/audit.log', '**/*audit*']:
+                audit_files.extend(list(scenario_dir.rglob(pattern)))
         
         if not audit_files:
             print(f"  No audit logs found, skipping...")
@@ -546,8 +560,15 @@ def main():
     input_path = Path(input_dir)
     input_lower = str(input_dir).lower()
     
-    if 'cic' in input_lower or 'ids2017' in input_lower:
-        events = parse_cic_ids2017_csv(input_dir)
+    if 'cic' in input_lower or 'ids2017' in input_lower or 'machinelearning' in input_lower:
+        # Handle both MachineLearningCSV and MachineLearningCVE folder names
+        input_path_check = Path(input_dir)
+        if (input_path_check / 'MachineLearningCVE').exists():
+            events = parse_cic_ids2017_csv(input_path_check / 'MachineLearningCVE')
+        elif (input_path_check / 'MachineLearningCSV').exists():
+            events = parse_cic_ids2017_csv(input_path_check / 'MachineLearningCSV')
+        else:
+            events = parse_cic_ids2017_csv(input_dir)
     elif 'lid' in input_lower or 'lid_ds' in input_lower:
         events = parse_lid_ds_2021(input_dir)
     elif 'adfa' in input_lower:
