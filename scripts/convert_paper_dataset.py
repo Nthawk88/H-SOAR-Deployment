@@ -345,44 +345,88 @@ def parse_cic_ids2017_csv(input_dir):
     print(f"Found {len(csv_files)} CSV file(s)")
     
     # Process each CSV file
-    for csv_file in csv_files[:10]:  # Limit to first 10 files for performance
+    for csv_file in csv_files[:8]:  # Limit to first 8 files for performance
         try:
             print(f"Processing {csv_file.name}...")
-            df = pd.read_csv(csv_file, low_memory=False)
             
-            # CIC-IDS2017 typically has 'Label' column for attack type
-            # Map to H-SOAR format
-            for idx, row in df.iterrows():
-                # Extract label
-                label_str = str(row.get('Label', 'BENIGN')).upper()
+            # Read CSV in chunks to handle large files
+            chunk_size = 10000
+            rows_processed = 0
+            
+            for chunk_df in pd.read_csv(csv_file, low_memory=False, chunksize=chunk_size):
+                # Check if Label column exists
+                if 'Label' not in chunk_df.columns:
+                    # Try to find label column (case insensitive)
+                    label_col = None
+                    for col in chunk_df.columns:
+                        if 'label' in col.lower():
+                            label_col = col
+                            break
+                    
+                    if label_col:
+                        chunk_df['Label'] = chunk_df[label_col]
+                    else:
+                        print(f"    Warning: No Label column found, skipping...")
+                        break
                 
-                # Map CIC-IDS2017 labels to H-SOAR labels
-                if 'BENIGN' in label_str or 'NORMAL' in label_str:
-                    label = 'benign'
-                elif any(attack in label_str for attack in ['BOT', 'DDOS', 'DOS', 'HEARTBLEED', 'INFILTRATION', 'PORTSCAN', 'WEB']):
-                    label = 'malicious'
-                else:
-                    label = 'suspicious'
+                # Process each row in chunk
+                for idx, row in chunk_df.iterrows():
+                    # Extract label
+                    label_str = str(row.get('Label', 'BENIGN')).upper().strip()
+                    
+                    # Map CIC-IDS2017 labels to H-SOAR labels
+                    if 'BENIGN' in label_str or 'NORMAL' in label_str:
+                        label = 'benign'
+                    elif any(attack in label_str for attack in ['BOT', 'DDOS', 'DOS', 'HEARTBLEED', 'INFILTRATION', 'PORTSCAN', 'WEB', 'ATTACK']):
+                        label = 'malicious'
+                    else:
+                        label = 'suspicious'
+                    
+                    # Extract network features and map to host-based features
+                    # Use destination port as process identifier
+                    dst_port = int(row.get(' Destination Port', row.get('Destination Port', 0))) if pd.notna(row.get(' Destination Port', row.get('Destination Port', None))) else 0
+                    
+                    # Map port to process name
+                    process = 'network'
+                    if dst_port == 80 or dst_port == 443:
+                        process = 'httpd'
+                    elif dst_port == 22:
+                        process = 'sshd'
+                    elif dst_port == 3306:
+                        process = 'mysqld'
+                    elif dst_port > 0:
+                        process = f'port_{dst_port}'
+                    
+                    # Use flow duration as indicator of suspiciousness
+                    flow_duration = float(row.get(' Flow Duration', row.get('Flow Duration', 0))) if pd.notna(row.get(' Flow Duration', row.get('Flow Duration', None))) else 0
+                    
+                    # Create event with network-to-host mapping
+                    event = {
+                        'event_type': 'file_integrity',  # Network flow mapped to file integrity
+                        'action': 'network_flow',
+                        'filepath': f'/network/flow_{dst_port}',  # Use port as filepath identifier
+                        'process': process,
+                        'user': '0',
+                        'label': label
+                    }
+                    
+                    events.append(event)
+                    rows_processed += 1
+                    
+                    # Limit per file (sample every Nth row for large files)
+                    if rows_processed >= 10000:  # Limit to 10k samples per file
+                        break
                 
-                # Extract features (CIC-IDS2017 has many network features)
-                # Map to H-SOAR format as best as possible
-                event = {
-                    'event_type': 'file_integrity',  # Default, CIC-IDS2017 is network-based
-                    'action': 'network_flow',
-                    'filepath': '/network/flow',  # Placeholder
-                    'process': 'network',
-                    'user': '0',
-                    'label': label
-                }
-                
-                events.append(event)
-                
-                # Limit per file
-                if len(events) >= 5000:
+                # Break if limit reached
+                if rows_processed >= 10000:
                     break
+                    
+            print(f"    Processed {rows_processed} rows from {csv_file.name}")
                     
         except Exception as e:
             print(f"    Warning: Could not parse {csv_file}: {e}")
+            import traceback
+            traceback.print_exc()
             continue
     
     print(f"\n✅ Extracted {len(events)} events from CIC-IDS2017")
