@@ -3,6 +3,7 @@
 
 from main import HSOARSystem
 import json
+import numpy as np
 
 # Initialize system (no need to call initialize())
 system = HSOARSystem()
@@ -56,8 +57,25 @@ for test in test_events:
     # Classify
     result = system.ml_classifier.classify(features)
     
+    # Convert numpy types to Python native types for JSON serialization
+    def convert_to_native(obj):
+        if isinstance(obj, dict):
+            return {k: convert_to_native(v) for k, v in obj.items()}
+        elif isinstance(obj, (list, tuple)):
+            return [convert_to_native(item) for item in obj]
+        elif isinstance(obj, (np.integer, np.int64, np.int32)):
+            return int(obj)
+        elif isinstance(obj, (np.floating, np.float64, np.float32)):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        else:
+            return obj
+    
+    result_serializable = convert_to_native(result)
+    
     print(f"Result:")
-    print(json.dumps(result, indent=2))
+    print(json.dumps(result_serializable, indent=2))
     print("-"*80)
     print()
 
