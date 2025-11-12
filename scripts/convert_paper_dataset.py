@@ -125,13 +125,22 @@ def parse_lid_ds_2021(input_dir):
     # Or: scenario_name/audit.log
     
     # Look for scenario directories (CVE-*, CWE-*, etc.)
-    scenario_dirs = [d for d in input_path.iterdir() if d.is_dir() and not d.name.startswith('.') and not d.name.startswith('__')]
+    # First, check if current directory is already a scenario (has training/test/validation)
+    has_standard_folders = any((input_path / folder).exists() for folder in ['training', 'test', 'validation'])
     
-    if not scenario_dirs:
-        # Try nested structure
-        for subdir in input_path.iterdir():
-            if subdir.is_dir() and not subdir.name.startswith('.'):
-                scenario_dirs.extend([d for d in subdir.iterdir() if d.is_dir()])
+    if has_standard_folders:
+        # Current directory is the scenario (e.g., CVE-2020-23839/)
+        scenario_dirs = [input_path]
+        scenario_name = input_path.name
+    else:
+        # Look for scenario directories (CVE-*, CWE-*, etc.)
+        scenario_dirs = [d for d in input_path.iterdir() if d.is_dir() and not d.name.startswith('.') and not d.name.startswith('__')]
+        
+        if not scenario_dirs:
+            # Try nested structure
+            for subdir in input_path.iterdir():
+                if subdir.is_dir() and not subdir.name.startswith('.'):
+                    scenario_dirs.extend([d for d in subdir.iterdir() if d.is_dir()])
     
     print(f"Found {len(scenario_dirs)} scenario(s)")
     
