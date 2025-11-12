@@ -91,29 +91,57 @@ case $choice in
         echo "CIC-IDS2017 Dataset Download"
         echo "Paper: Sharafaldin et al., ICISSP 2018"
         echo ""
-        echo "⚠️  Large dataset (~2.5GB), manual download required"
+        echo "Downloading MachineLearningCSV.zip (224MB) - Recommended for H-SOAR"
         echo ""
-        echo "Steps:"
-        echo "1. Visit: https://www.unb.ca/cic/datasets/ids-2017.html"
-        echo "2. Download CIC-IDS2017 dataset"
-        echo "3. Extract to: data/external/cic_ids2017/"
-        echo ""
-        read -p "Have you downloaded and extracted CIC-IDS2017? (y/n): " downloaded
-        
-        if [ "$downloaded" != "y" ]; then
-            echo ""
-            echo "Please download CIC-IDS2017 manually first."
-            echo "Website: https://www.unb.ca/cic/datasets/ids-2017.html"
-            exit 1
-        fi
         
         if [ ! -d "cic_ids2017" ]; then
-            echo "Error: cic_ids2017 directory not found in data/external/"
-            echo "Please extract CIC-IDS2017 dataset to data/external/cic_ids2017/"
-            exit 1
+            mkdir -p cic_ids2017
         fi
         
-        echo "✅ CIC-IDS2017 dataset found!"
+        cd cic_ids2017
+        
+        if [ ! -f "MachineLearningCSV.zip" ]; then
+            echo "Downloading MachineLearningCSV.zip..."
+            wget http://cicresearch.ca/MachineLearningCSV.zip || {
+                echo "Error: Failed to download MachineLearningCSV.zip"
+                echo ""
+                echo "Manual download:"
+                echo "1. Visit: http://cicresearch.ca/"
+                echo "2. Download MachineLearningCSV.zip (224MB)"
+                echo "3. Place in: data/external/cic_ids2017/"
+                exit 1
+            }
+        fi
+        
+        if [ ! -f "MachineLearningCSV.md5" ]; then
+            echo "Downloading checksum..."
+            wget http://cicresearch.ca/MachineLearningCSV.md5 || echo "Warning: Could not download checksum"
+        fi
+        
+        if [ -f "MachineLearningCSV.md5" ]; then
+            echo "Verifying checksum..."
+            md5sum -c MachineLearningCSV.md5 || echo "Warning: Checksum verification failed"
+        fi
+        
+        if [ ! -d "MachineLearningCSV" ]; then
+            echo "Extracting MachineLearningCSV.zip..."
+            unzip -q MachineLearningCSV.zip || {
+                echo "Error: Failed to extract MachineLearningCSV.zip"
+                exit 1
+            }
+        fi
+        
+        echo "✅ CIC-IDS2017 MachineLearningCSV dataset ready!"
+        echo ""
+        echo "Checking CSV files..."
+        if [ -d "MachineLearningCSV" ]; then
+            csv_count=$(find MachineLearningCSV -name "*.csv" | wc -l)
+            echo "   Found $csv_count CSV file(s)"
+            echo "   Sample files:"
+            find MachineLearningCSV -name "*.csv" | head -3
+        fi
+        
+        cd ..
         DATASET_PATH="cic_ids2017"
         ;;
     
