@@ -202,78 +202,94 @@ def parse_lid_ds_2021(input_dir):
                                 if not line:
                                     continue
                                 
-                                # LID-DS .sc format: system call traces
-                                # Format bisa berupa: syscall_number atau syscall_name(args)
-                                # Contoh: 59, execve, open("/etc/passwd", ...)
+                                # LID-DS .sc format: timestamp exit_code tid process pid syscall pid direction [params]
+                                # Example: 1631552154264127100 33 920679 apache2 920679 open > 
+                                # Example: 1631552154264134650 33 920679 apache2 920679 open < fd=13 name=/dev/urandom
                                 
-                                # Try to extract syscall info
-                                # Common syscalls: 2=open, 3=read, 4=write, 5=openat, 59=execve
-                                syscall_num = None
-                                syscall_name = None
+                                parts = line.split()
+                                if len(parts) < 7:
+                                    continue
+                                
+                                # Parse fields
+                                # parts[0] = timestamp
+                                # parts[1] = exit_code
+                                # parts[2] = tid
+                                # parts[3] = process_name
+                                # parts[4] = pid
+                                # parts[5] = syscall_name
+                                # parts[6] = pid (duplicate)
+                                # parts[7] = direction (< or >)
+                                # parts[8:] = parameters
+                                
+                                process_name = parts[3] if len(parts) > 3 else 'unknown'
+                                syscall_name = parts[5] if len(parts) > 5 else ''
+                                direction = parts[7] if len(parts) > 7 else ''
+                                
+                                # Only process syscall entries (not returns)
+                                if direction != '>' or not syscall_name:
+                                    continue
+                                
+                                # Extract filepath from parameters if available
                                 filepath = ''
+                                params_str = ' '.join(parts[8:]) if len(parts) > 8 else ''
                                 
-                                # Try to parse as syscall number
-                                try:
-                                    syscall_num = int(line.split()[0])
-                                except:
-                                    # Try to parse as syscall name
-                                    if 'execve' in line.lower() or 'exec' in line.lower():
-                                        syscall_name = 'execve'
-                                        event_type = 'process_execution'
-                                        action = 'execute'
-                                        filepath = '/bin/sh'  # Placeholder
-                                    elif 'open' in line.lower():
-                                        syscall_name = 'open'
-                                        event_type = 'file_integrity'
-                                        action = 'open'
-                                        # Try to extract filepath from line
-                                        path_match = re.search(r'["\']([^"\']+)["\']', line)
-                                        filepath = path_match.group(1) if path_match else '/etc/passwd'
-                                    elif 'write' in line.lower():
-                                        syscall_name = 'write'
-                                        event_type = 'file_integrity'
-                                        action = 'write'
-                                        path_match = re.search(r'["\']([^"\']+)["\']', line)
-                                        filepath = path_match.group(1) if path_match else '/etc/passwd'
-                                    else:
-                                        continue
+                                # Look for name= parameter (file path)
+                                name_match = re.search(r'name=([^\s]+)', params_str)
+                                if name_match:
+                                    filepath = name_match.group(1)
                                 
-                                # Map syscall number to name if needed
-                                if syscall_num is not None:
-                                    syscall_map = {
-                                        2: ('open', 'file_integrity', 'open'),
-                                        3: ('read', 'file_integrity', 'read'),
-                                        4: ('write', 'file_integrity', 'write'),
-                                        5: ('openat', 'file_integrity', 'open'),
-                                        59: ('execve', 'process_execution', 'execute'),
-                                        257: ('openat2', 'file_integrity', 'open')
-                                    }
-                                    if syscall_num in syscall_map:
-                                        syscall_name, event_type, action = syscall_map[syscall_num]
-                                        filepath = '/etc/passwd' if syscall_num in [2, 4, 5] else '/bin/sh'
-                                    else:
-                                        continue
+                                # Map syscall to event type and action
+                                event_type = 'file_integrity'
+                                action = 'read'
                                 
-                                if not syscall_name:
+                                if syscall_name in ['execve', 'execveat', 'exec']:
+                                    event_type = 'process_execution'
+                                    action = 'execute'
+                                    if not filepath:
+                                        filepath = '/bin/sh'
+                                elif syscall_name in ['open', 'openat', 'openat2']:
+                                    event_type = 'file_integrity'
+                                    action = 'open'
+                                    if not filepath:
+                                        filepath = '/etc/passwd'
+                                elif syscall_name in ['write', 'pwrite', 'pwritev']:
+                                    event_type = 'file_integrity'
+                                    action = 'write'
+                                    if not filepath:
+                                        filepath = '/etc/passwd'
+                                elif syscall_name in ['unlink', 'unlinkat', 'rmdir']:
+                                    event_type = 'file_integrity'
+                                    action = 'delete'
+                                    if not filepath:
+                                        filepath = '/tmp/file'
+                                elif syscall_name in ['read', 'pread', 'preadv']:
+                                    event_type = 'file_integrity'
+                                    action = 'read'
+                                    if not filepath:
+                                        filepath = '/etc/passwd'
+                                else:
+                                    # Skip other syscalls to focus on file/process operations
                                     continue
                                 
                                 event = {
                                     'event_type': event_type,
                                     'action': action,
                                     'filepath': filepath,
-                                    'process': syscall_name,
+                                    'process': process_name,
                                     'user': '0',
                                     'label': 'malicious' if is_attack else 'benign'
                                 }
                                 events.append(event)
                                 sc_count += 1
                                 
-                                if sc_count >= 1000:  # Limit per .sc file
+                                if sc_count >= 2000:  # Limit per .sc file (increased for better coverage)
                                     break
                         
                         print(f"      Extracted {sc_count} system calls from {log_file.name}")
                     except Exception as e:
                         print(f"      Warning: Could not parse .sc file {log_file.name}: {e}")
+                        import traceback
+                        traceback.print_exc()
                         continue
                 
                 # Check if it's a JSON file
