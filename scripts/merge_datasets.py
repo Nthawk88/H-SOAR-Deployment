@@ -44,14 +44,48 @@ def merge_datasets(input_files, output_file):
     
     print(f"\nMerging {len(all_dataframes)} datasets...")
     
+    # Align columns before merging
+    print("Aligning columns...")
+    all_columns = set()
+    for df in all_dataframes:
+        all_columns.update(df.columns)
+    
+    all_columns = sorted(list(all_columns))
+    print(f"  Total unique columns: {len(all_columns)}")
+    
+    # Reindex all dataframes to have same columns (fill missing with NaN)
+    aligned_dataframes = []
+    for i, df in enumerate(all_dataframes, 1):
+        print(f"  Aligning dataset {i}...")
+        aligned_df = df.reindex(columns=all_columns)
+        
+        # Convert numeric columns to same type (handle mixed types)
+        for col in aligned_df.columns:
+            if col != 'label':  # Don't convert label column
+                # Try to convert to numeric, if fails keep as is
+                try:
+                    aligned_df[col] = pd.to_numeric(aligned_df[col], errors='coerce')
+                except:
+                    pass
+        
+        aligned_dataframes.append(aligned_df)
+    
     # Merge all dataframes
     try:
-        merged_df = pd.concat(all_dataframes, ignore_index=True)
-        
-        # Remove duplicates
+        merged_df = pd.concat(aligned_dataframes, ignore_index=True)
         initial_count = len(merged_df)
-        merged_df = merged_df.drop_duplicates()
+        
+        # Remove duplicates based on feature columns only (not label, to preserve different labels)
+        # Only remove if ALL feature values are identical
+        feature_columns = [col for col in merged_df.columns if col != 'label']
+        
+        print(f"\nRemoving duplicates (checking {len(feature_columns)} feature columns)...")
+        merged_df = merged_df.drop_duplicates(subset=feature_columns, keep='first')
         duplicates_removed = initial_count - len(merged_df)
+        
+        print(f"  Initial samples: {initial_count}")
+        print(f"  After deduplication: {len(merged_df)}")
+        print(f"  Duplicates removed: {duplicates_removed}")
         
         # Save merged dataset
         os.makedirs(os.path.dirname(output_file) if os.path.dirname(output_file) else '.', exist_ok=True)
