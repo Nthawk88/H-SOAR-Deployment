@@ -8,8 +8,14 @@ import sys
 import os
 from pathlib import Path
 
-def merge_datasets(input_files, output_file):
-    """Merge multiple CSV datasets into one"""
+def merge_datasets(input_files, output_file, skip_dedup=False):
+    """Merge multiple CSV datasets into one
+    
+    Args:
+        input_files: List of input CSV files
+        output_file: Output CSV file
+        skip_dedup: If True, skip duplicate removal (keep all samples)
+    """
     print("="*80)
     print("Merging H-SOAR Training Datasets")
     print("="*80)
@@ -80,51 +86,52 @@ def merge_datasets(input_files, output_file):
         # Option 2: Only remove if ALL columns (including label) are identical
         # Option 3: Only remove duplicates within each original dataset, not cross-dataset
         
-        print(f"\nRemoving duplicates...")
-        
-        # Strategy: Remove duplicates within each original dataset first,
-        # then merge, then optionally remove cross-dataset duplicates
-        # This is more conservative and preserves more samples
-        
         initial_count = len(merged_df)
         
-        # Strategy: Remove duplicates within each original dataset first,
-        # then merge, then optionally remove cross-dataset duplicates
-        print(f"  Removing duplicates within each source dataset first...")
-        deduped_by_source = []
-        for i, df in enumerate(aligned_dataframes, 1):
-            source_name = f"dataset_{i}"
-            initial_source = len(df)
-            df_deduped = df.drop_duplicates(keep='first')
-            removed_source = initial_source - len(df_deduped)
-            if removed_source > 0:
-                print(f"    {source_name}: Removed {removed_source} duplicates ({removed_source/initial_source*100:.1f}%)")
-            deduped_by_source.append(df_deduped)
-        
-        # Merge deduplicated datasets
-        merged_df = pd.concat(deduped_by_source, ignore_index=True)
-        after_within_dedup = len(merged_df)
-        
-        # Now remove cross-dataset duplicates (only if ALL columns including label are identical)
-        print(f"  Removing cross-dataset duplicates (only if ALL columns identical)...")
-        before_cross = len(merged_df)
-        merged_df = merged_df.drop_duplicates(keep='first')
-        cross_removed = before_cross - len(merged_df)
-        
-        duplicates_removed = initial_count - len(merged_df)
-        
-        print(f"  Initial samples: {initial_count}")
-        print(f"  After within-dataset deduplication: {after_within_dedup}")
-        print(f"  After cross-dataset deduplication: {len(merged_df)}")
-        print(f"  Within-dataset duplicates removed: {initial_count - after_within_dedup}")
-        print(f"  Cross-dataset duplicates removed: {cross_removed}")
-        print(f"  Total duplicates removed: {duplicates_removed}")
-        
-        if duplicates_removed > initial_count * 0.5:
-            print(f"\n  ⚠️  Warning: More than 50% of samples were removed as duplicates!")
-            print(f"  This suggests datasets may have many identical rows.")
-            print(f"  Consider checking the datasets with: python scripts/debug_merge.py <file1> <file2>")
-            print(f"  Or use --no-dedup flag to skip duplicate removal entirely.")
+        if skip_dedup:
+            print(f"\n⚠️  Skipping duplicate removal (keeping all {initial_count} samples)")
+            print(f"  This is recommended for training datasets with many similar samples")
+            duplicates_removed = 0
+        else:
+            print(f"\nRemoving duplicates...")
+            
+            # Strategy: Remove duplicates within each original dataset first,
+            # then merge, then optionally remove cross-dataset duplicates
+            print(f"  Removing duplicates within each source dataset first...")
+            deduped_by_source = []
+            for i, df in enumerate(aligned_dataframes, 1):
+                source_name = f"dataset_{i}"
+                initial_source = len(df)
+                df_deduped = df.drop_duplicates(keep='first')
+                removed_source = initial_source - len(df_deduped)
+                if removed_source > 0:
+                    print(f"    {source_name}: Removed {removed_source} duplicates ({removed_source/initial_source*100:.1f}%)")
+                deduped_by_source.append(df_deduped)
+            
+            # Merge deduplicated datasets
+            merged_df = pd.concat(deduped_by_source, ignore_index=True)
+            after_within_dedup = len(merged_df)
+            
+            # Now remove cross-dataset duplicates (only if ALL columns including label are identical)
+            print(f"  Removing cross-dataset duplicates (only if ALL columns identical)...")
+            before_cross = len(merged_df)
+            merged_df = merged_df.drop_duplicates(keep='first')
+            cross_removed = before_cross - len(merged_df)
+            
+            duplicates_removed = initial_count - len(merged_df)
+            
+            print(f"  Initial samples: {initial_count}")
+            print(f"  After within-dataset deduplication: {after_within_dedup}")
+            print(f"  After cross-dataset deduplication: {len(merged_df)}")
+            print(f"  Within-dataset duplicates removed: {initial_count - after_within_dedup}")
+            print(f"  Cross-dataset duplicates removed: {cross_removed}")
+            print(f"  Total duplicates removed: {duplicates_removed}")
+            
+            if duplicates_removed > initial_count * 0.5:
+                print(f"\n  ⚠️  Warning: More than 50% of samples were removed as duplicates!")
+                print(f"  This suggests datasets may have many identical rows.")
+                print(f"  Consider using --no-dedup flag to keep all samples for training.")
+                print(f"  Or check datasets with: python scripts/debug_merge.py <file1> <file2>")
         
         # Save merged dataset
         os.makedirs(os.path.dirname(output_file) if os.path.dirname(output_file) else '.', exist_ok=True)
@@ -158,7 +165,9 @@ def merge_datasets(input_files, output_file):
 
 def main():
     if len(sys.argv) < 3:
-        print("Usage: python merge_datasets.py <output_file> <input_file1> [input_file2] ...")
+        print("Usage: python merge_datasets.py <output_file> <input_file1> [input_file2] ... [--no-dedup]")
+        print("\nOptions:")
+        print("  --no-dedup    Skip duplicate removal (keep all samples)")
         print("\nExamples:")
         print("  python merge_datasets.py data/training_dataset.csv \\")
         print("    data/training_dataset_adfa.csv \\")
@@ -166,13 +175,20 @@ def main():
         print("\n  python merge_datasets.py data/training_dataset_merged.csv \\")
         print("    data/training_dataset.csv \\")
         print("    data/training_dataset_unsw.csv \\")
-        print("    data/training_dataset_cic.csv")
+        print("    data/training_dataset_cic.csv \\")
+        print("    --no-dedup")
         sys.exit(1)
     
-    output_file = sys.argv[1]
-    input_files = sys.argv[2:]
+    # Parse arguments
+    args = sys.argv[1:]
+    skip_dedup = '--no-dedup' in args
+    if skip_dedup:
+        args.remove('--no-dedup')
     
-    success = merge_datasets(input_files, output_file)
+    output_file = args[0]
+    input_files = args[1:]
+    
+    success = merge_datasets(input_files, output_file, skip_dedup=skip_dedup)
     
     if success:
         print("\nNext steps:")
