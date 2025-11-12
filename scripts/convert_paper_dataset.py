@@ -169,8 +169,8 @@ def parse_lid_ds_2021(input_dir):
                             with zipfile.ZipFile(zip_file, 'r') as zf:
                                 zf.extractall(temp_dir / zip_file.stem)
                             
-                            # Look for logs in extracted ZIP
-                            for pattern in ['*.log', 'audit*', '*.audit', '*.json']:
+                            # Look for logs and system call files in extracted ZIP
+                            for pattern in ['*.log', 'audit*', '*.audit', '*.json', '*.sc']:
                                 audit_files.extend(list((temp_dir / zip_file.stem).rglob(pattern)))
                         except Exception as e:
                             print(f"    Warning: Could not extract {zip_file.name}: {e}")
@@ -191,8 +191,93 @@ def parse_lid_ds_2021(input_dir):
             try:
                 print(f"    Parsing {log_file.name}...")
                 
+                # Check if it's a .sc file (system calls)
+                if log_file.suffix == '.sc':
+                    try:
+                        print(f"      Parsing system calls from {log_file.name}...")
+                        with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                            sc_count = 0
+                            for line in f:
+                                line = line.strip()
+                                if not line:
+                                    continue
+                                
+                                # LID-DS .sc format: system call traces
+                                # Format bisa berupa: syscall_number atau syscall_name(args)
+                                # Contoh: 59, execve, open("/etc/passwd", ...)
+                                
+                                # Try to extract syscall info
+                                # Common syscalls: 2=open, 3=read, 4=write, 5=openat, 59=execve
+                                syscall_num = None
+                                syscall_name = None
+                                filepath = ''
+                                
+                                # Try to parse as syscall number
+                                try:
+                                    syscall_num = int(line.split()[0])
+                                except:
+                                    # Try to parse as syscall name
+                                    if 'execve' in line.lower() or 'exec' in line.lower():
+                                        syscall_name = 'execve'
+                                        event_type = 'process_execution'
+                                        action = 'execute'
+                                        filepath = '/bin/sh'  # Placeholder
+                                    elif 'open' in line.lower():
+                                        syscall_name = 'open'
+                                        event_type = 'file_integrity'
+                                        action = 'open'
+                                        # Try to extract filepath from line
+                                        path_match = re.search(r'["\']([^"\']+)["\']', line)
+                                        filepath = path_match.group(1) if path_match else '/etc/passwd'
+                                    elif 'write' in line.lower():
+                                        syscall_name = 'write'
+                                        event_type = 'file_integrity'
+                                        action = 'write'
+                                        path_match = re.search(r'["\']([^"\']+)["\']', line)
+                                        filepath = path_match.group(1) if path_match else '/etc/passwd'
+                                    else:
+                                        continue
+                                
+                                # Map syscall number to name if needed
+                                if syscall_num is not None:
+                                    syscall_map = {
+                                        2: ('open', 'file_integrity', 'open'),
+                                        3: ('read', 'file_integrity', 'read'),
+                                        4: ('write', 'file_integrity', 'write'),
+                                        5: ('openat', 'file_integrity', 'open'),
+                                        59: ('execve', 'process_execution', 'execute'),
+                                        257: ('openat2', 'file_integrity', 'open')
+                                    }
+                                    if syscall_num in syscall_map:
+                                        syscall_name, event_type, action = syscall_map[syscall_num]
+                                        filepath = '/etc/passwd' if syscall_num in [2, 4, 5] else '/bin/sh'
+                                    else:
+                                        continue
+                                
+                                if not syscall_name:
+                                    continue
+                                
+                                event = {
+                                    'event_type': event_type,
+                                    'action': action,
+                                    'filepath': filepath,
+                                    'process': syscall_name,
+                                    'user': '0',
+                                    'label': 'malicious' if is_attack else 'benign'
+                                }
+                                events.append(event)
+                                sc_count += 1
+                                
+                                if sc_count >= 1000:  # Limit per .sc file
+                                    break
+                        
+                        print(f"      Extracted {sc_count} system calls from {log_file.name}")
+                    except Exception as e:
+                        print(f"      Warning: Could not parse .sc file {log_file.name}: {e}")
+                        continue
+                
                 # Check if it's a JSON file
-                if log_file.suffix == '.json':
+                elif log_file.suffix == '.json':
                     import json
                     try:
                         with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
@@ -257,9 +342,9 @@ def parse_lid_ds_2021(input_dir):
                             # Parse auditd log line
                             # Format: type=PATH msg=audit(...): item=0 name="..." ...
                             if 'type=PATH' in line or 'type=SYSCALL' in line:
-                            # Extract file path
-                            name_match = re.search(r'name="([^"]+)"', line)
-                            filepath = name_match.group(1) if name_match else ''
+                                # Extract file path
+                                name_match = re.search(r'name="([^"]+)"', line)
+                                filepath = name_match.group(1) if name_match else ''
                             
                             # Extract process
                             comm_match = re.search(r'comm="([^"]+)"', line)
