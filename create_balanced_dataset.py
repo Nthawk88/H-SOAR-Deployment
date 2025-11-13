@@ -32,11 +32,18 @@ def create_balanced_dataset(input_files, output_file, target_benign_ratio=0.7, m
             df = pd.read_csv(input_file)
             print(f"  Original: {len(df)} samples")
             
-            # Deduplicate within dataset
-            feature_cols = [col for col in df.columns if col != 'label']
-            df_dedup = df.drop_duplicates(subset=feature_cols, keep='first')
+            # Deduplicate within dataset (only if ALL columns including label are identical)
+            # This is less aggressive and keeps more samples
+            df_dedup = df.drop_duplicates(keep='first')
             removed = len(df) - len(df_dedup)
-            print(f"  After dedup: {len(df_dedup)} samples (removed {removed} duplicates)")
+            print(f"  After dedup (all columns): {len(df_dedup)} samples (removed {removed} duplicates)")
+            
+            # If still too many duplicates, try feature-based dedup but keep more samples
+            if removed > len(df) * 0.9:  # If >90% duplicates, try less aggressive
+                print(f"    Too many duplicates, trying less aggressive deduplication...")
+                # Keep samples even if features are similar (only remove exact duplicates)
+                df_dedup = df.drop_duplicates(keep='first')
+                print(f"    Final: {len(df_dedup)} samples")
             
             # Group by label
             for label in df_dedup['label'].unique():
@@ -65,11 +72,14 @@ def create_balanced_dataset(input_files, output_file, target_benign_ratio=0.7, m
         # Combine all datasets for this label
         combined = pd.concat(dfs, ignore_index=True)
         
-        # Remove duplicates across datasets
-        feature_cols = [col for col in combined.columns if col != 'label']
-        combined = combined.drop_duplicates(subset=feature_cols, keep='first')
+        # Remove duplicates across datasets (only exact duplicates)
+        initial_count = len(combined)
+        combined = combined.drop_duplicates(keep='first')
+        removed = initial_count - len(combined)
+        if removed > 0:
+            print(f"  {label}: Removed {removed} exact duplicates (kept {len(combined)} samples)")
         
-        # Sample if too many
+        # Sample if too many (but keep more samples for better training)
         if len(combined) > max_samples_per_class:
             print(f"  {label}: Sampling {max_samples_per_class} from {len(combined)} samples")
             combined = combined.sample(n=max_samples_per_class, random_state=42)
