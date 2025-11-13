@@ -730,9 +730,45 @@ def parse_cic_ids2017_csv(input_dir):
                     packet_count = int(row.get(' Total Fwd Packets', row.get('Total Fwd Packets', 0))) if pd.notna(row.get(' Total Fwd Packets', row.get('Total Fwd Packets', None))) else 0
                     total_packets = int(row.get(' Total Packets', row.get('Total Packets', 0))) if pd.notna(row.get(' Total Packets', row.get('Total Packets', None))) else 0
                     
+                    benign_web_paths = [
+                        '/var/www/html/index.html',
+                        '/var/www/html/assets/app.js',
+                        '/var/www/html/uploads/file.txt'
+                    ]
+                    benign_user_files = [
+                        '/home/user/downloads/file.log',
+                        '/home/user/documents/report.docx',
+                        '/home/dev/projects/app/output.log'
+                    ]
+                    malicious_paths = [
+                        '/tmp/.exploit/loader.sh',
+                        '/var/www/html/shell.php',
+                        '/etc/cron.d/backdoor',
+                        '/root/.ssh/authorized_keys'
+                    ]
+                    benign_users = ['www-data', 'apache', 'nginx', 'user1000', 'user1001']
+                    malicious_users = ['root', '0']
+
                     # Create more varied filepath using multiple features
                     filepath_hash = hashlib.md5(f"{src_ip}_{dst_ip}_{dst_port}_{flow_duration}_{packet_count}".encode()).hexdigest()[:8]
-                    filepath = f'/network/flow_{dst_port}_{filepath_hash}'
+
+                    if label == 'benign':
+                        if process.startswith('httpd'):
+                            filepath = random.choice(benign_web_paths)
+                            user_value = random.choice(['www-data', 'apache', 'nginx'])
+                        elif process.startswith('sshd'):
+                            filepath = f"/home/user/.ssh/known_hosts_{filepath_hash}"
+                            user_value = random.choice(['user1000', 'user1001'])
+                        else:
+                            filepath = f"/home/user/logs/flow_{dst_port}_{filepath_hash}.log"
+                            user_value = random.choice(benign_users)
+                    elif label == 'malicious':
+                        filepath = random.choice(malicious_paths).replace('.php', f'_{filepath_hash}.php')
+                        user_value = random.choice(malicious_users)
+                        process = f"{process}_mal"
+                    else:
+                        filepath = f"/network/flow_{dst_port}_{filepath_hash}"
+                        user_value = str(hash(f"{src_ip}_{dst_ip}") % 1000)
                     
                     # Add timestamp variation (use row index + flow duration for pseudo-timestamp)
                     timestamp_base = idx + rows_processed * 1000 + int(flow_duration) % 1000000
@@ -751,7 +787,7 @@ def parse_cic_ids2017_csv(input_dir):
                         'action': 'network_flow',
                         'filepath': filepath,
                         'process': process,
-                        'user': str(hash(f"{src_ip}_{dst_ip}") % 1000),  # Use IP hash for user variation
+                        'user': user_value,
                         'label': label,
                         'timestamp': timestamp_base,
                         'hour': hour,
