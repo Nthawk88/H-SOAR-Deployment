@@ -373,13 +373,21 @@ def parse_lid_ds_2021(input_dir):
                                         user = str(item.get('uid', item.get('auid', '0')))
                                         action = item.get('action', item.get('type', 'write'))
                                         
+                                        # Add timestamp variation
+                                        timestamp = item.get('timestamp', item.get('time', hash(f"{process}_{filepath}") % 1000000000000))
+                                        hour = (int(timestamp) // 1000000000000) % 24 if isinstance(timestamp, (int, float)) and timestamp > 1000000000000 else hash(f"{process}_{filepath}") % 24
+                                        day = (int(timestamp) // 100000000000000) % 7 if isinstance(timestamp, (int, float)) and timestamp > 100000000000000 else hash(f"{process}_{filepath}") % 7
+                                        
                                         event = {
                                             'event_type': 'file_integrity',
                                             'action': action,
                                             'filepath': filepath,
                                             'process': process,
                                             'user': user,
-                                            'label': 'malicious' if is_attack else 'benign'
+                                            'label': 'malicious' if is_attack else 'benign',
+                                            'timestamp': int(timestamp) if isinstance(timestamp, (int, float)) else hash(f"{process}_{filepath}"),
+                                            'hour': hour,
+                                            'day': day
                                         }
                                         events.append(event)
                             elif isinstance(json_data, dict):
