@@ -12,6 +12,7 @@ from datetime import datetime
 import re
 import json
 import hashlib
+import random
 
 def calculate_criticality(filepath):
     """Calculate file path criticality score (1-10)"""
@@ -501,6 +502,51 @@ def parse_adfa_ld(input_dir):
         'Attack_Data_Master': 'malicious'
     }
     
+    benign_read_paths = [
+        '/home/user/documents/report.txt',
+        '/home/user/.bashrc',
+        '/home/dev/project/main.py',
+        '/var/log/auth.log',
+        '/tmp/cache/tmpfile.tmp',
+        '/home/user/downloads/file.zip'
+    ]
+    benign_write_paths = [
+        '/home/user/documents/notes.txt',
+        '/tmp/session/output.log',
+        '/var/tmp/app/cache.dat',
+        '/home/dev/project/results.csv'
+    ]
+    benign_exec_paths = [
+        '/usr/bin/vim',
+        '/usr/bin/python3',
+        '/usr/bin/firefox',
+        '/usr/bin/ssh',
+        '/usr/bin/scp'
+    ]
+    benign_processes = ['vim', 'python3', 'firefox', 'ssh', 'scp', 'make']
+    benign_users = ['1000', '1001', '1002', 'www-data']
+
+    malicious_read_paths = [
+        '/etc/passwd',
+        '/etc/shadow',
+        '/var/log/secure',
+        '/root/.ssh/id_rsa'
+    ]
+    malicious_write_paths = [
+        '/etc/passwd',
+        '/tmp/.ssh_keys',
+        '/var/www/html/shell.php',
+        '/root/.ssh/authorized_keys'
+    ]
+    malicious_exec_paths = [
+        '/bin/sh',
+        '/usr/bin/nc',
+        '/usr/bin/sudo',
+        '/usr/bin/perl'
+    ]
+    malicious_processes = ['bash', 'nc', 'sudo', 'perl', 'python']
+    malicious_users = ['0', 'root']
+
     for dataset_type, label in dataset_types.items():
         dataset_path = input_path / dataset_type
         
@@ -540,30 +586,54 @@ def parse_adfa_ld(input_dir):
                     for syscall in syscalls[:100]:  # Limit per trace
                         # Common syscalls: 2=open, 3=read, 4=write, 5=openat, 59=execve
                         if syscall in [59, 11]:  # execve, execveat
+                            if label == 'benign':
+                                filepath = random.choice(benign_exec_paths)
+                                process_name = random.choice(benign_processes)
+                                user_name = random.choice(benign_users)
+                            else:
+                                filepath = random.choice(malicious_exec_paths)
+                                process_name = random.choice(malicious_processes)
+                                user_name = random.choice(malicious_users)
                             event = {
                                 'event_type': 'process_execution',
                                 'action': 'execute',
-                                'filepath': '/bin/sh',  # Placeholder
-                                'process': 'unknown',
-                                'user': '0',
+                                'filepath': filepath,
+                                'process': process_name,
+                                'user': user_name,
                                 'label': label
                             }
                         elif syscall in [2, 5, 257]:  # open, openat, openat2
+                            if label == 'benign':
+                                filepath = random.choice(benign_read_paths)
+                                process_name = random.choice(benign_processes)
+                                user_name = random.choice(benign_users)
+                            else:
+                                filepath = random.choice(malicious_read_paths)
+                                process_name = random.choice(malicious_processes)
+                                user_name = random.choice(malicious_users)
                             event = {
                                 'event_type': 'file_integrity',
                                 'action': 'open',
-                                'filepath': '/etc/passwd',  # Placeholder
-                                'process': 'unknown',
-                                'user': '0',
+                                'filepath': filepath,
+                                'process': process_name,
+                                'user': user_name,
                                 'label': label
                             }
                         elif syscall in [4, 278]:  # write, pwritev2
+                            if label == 'benign':
+                                filepath = random.choice(benign_write_paths)
+                                process_name = random.choice(benign_processes)
+                                user_name = random.choice(benign_users)
+                            else:
+                                filepath = random.choice(malicious_write_paths)
+                                process_name = random.choice(malicious_processes)
+                                user_name = random.choice(malicious_users)
                             event = {
                                 'event_type': 'file_integrity',
                                 'action': 'write',
-                                'filepath': '/etc/passwd',  # Placeholder
-                                'process': 'unknown',
-                                'user': '0',
+                                'filepath': filepath,
+                                'process': process_name,
+                                'user': user_name,
                                 'label': label
                             }
                         else:
