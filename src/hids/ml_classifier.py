@@ -16,6 +16,7 @@ from sklearn.svm import SVC
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.utils.class_weight import compute_sample_weight
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -122,22 +123,28 @@ class HIDSMLClassifier:
             X_train, X_test, y_train, y_test = train_test_split(
                 X, y, test_size=0.2, random_state=42, stratify=y
             )
-            
+
             self.logger.info(f"Training set: {len(X_train)} samples")
             self.logger.info(f"Test set: {len(X_test)} samples")
-            
+
+            # Compute sample weights to balance classes
+            sample_weights = compute_sample_weight(class_weight='balanced', y=y_train)
+
             # Train each model
             model_results = {}
             for model_name, model in self.models.items():
                 self.logger.info(f"Training {model_name}...")
-                
+
                 # Scale features
                 scaler = self.scalers[model_name]
                 X_train_scaled = scaler.fit_transform(X_train)
                 X_test_scaled = scaler.transform(X_test)
-                
-                # Train model
-                model.fit(X_train_scaled, y_train)
+
+                # Train model with class-balanced weights when supported
+                try:
+                    model.fit(X_train_scaled, y_train, sample_weight=sample_weights)
+                except TypeError:
+                    model.fit(X_train_scaled, y_train)
                 
                 # Evaluate model
                 y_pred = model.predict(X_test_scaled)
