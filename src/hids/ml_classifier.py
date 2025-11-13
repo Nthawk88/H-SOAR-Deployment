@@ -56,7 +56,8 @@ class HIDSMLClassifier:
                 min_samples_split=5,
                 min_samples_leaf=2,
                 random_state=42,
-                n_jobs=-1
+                n_jobs=-1,
+                class_weight='balanced'  # Handle class imbalance
             )
             self.scalers['random_forest'] = StandardScaler()
         
@@ -75,7 +76,8 @@ class HIDSMLClassifier:
                 C=1.0,
                 gamma='scale',
                 probability=True,
-                random_state=42
+                random_state=42,
+                class_weight='balanced'  # Handle class imbalance
             )
             self.scalers['svm'] = StandardScaler()
         
