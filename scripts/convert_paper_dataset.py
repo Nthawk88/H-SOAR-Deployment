@@ -655,15 +655,22 @@ def parse_cic_ids2017_csv(input_dir):
                     src_ip = str(row.get(' Source IP', row.get('Source IP', '0.0.0.0')))
                     dst_ip = str(row.get(' Destination IP', row.get('Destination IP', '0.0.0.0')))
                     packet_count = int(row.get(' Total Fwd Packets', row.get('Total Fwd Packets', 0))) if pd.notna(row.get(' Total Fwd Packets', row.get('Total Fwd Packets', None))) else 0
+                    total_packets = int(row.get(' Total Packets', row.get('Total Packets', 0))) if pd.notna(row.get(' Total Packets', row.get('Total Packets', None))) else 0
                     
                     # Create more varied filepath using multiple features
-                    filepath_hash = hashlib.md5(f"{src_ip}_{dst_ip}_{dst_port}_{flow_duration}".encode()).hexdigest()[:8]
+                    filepath_hash = hashlib.md5(f"{src_ip}_{dst_ip}_{dst_port}_{flow_duration}_{packet_count}".encode()).hexdigest()[:8]
                     filepath = f'/network/flow_{dst_port}_{filepath_hash}'
                     
-                    # Add timestamp variation (use row index to create pseudo-timestamp)
-                    timestamp_base = idx + rows_processed * 1000
+                    # Add timestamp variation (use row index + flow duration for pseudo-timestamp)
+                    timestamp_base = idx + rows_processed * 1000 + int(flow_duration) % 1000000
                     hour = (timestamp_base // 3600) % 24
                     day = (timestamp_base // 86400) % 7
+                    
+                    # Add variation to process name based on packet count
+                    if total_packets > 1000:
+                        process = f"{process}_high_vol"
+                    elif total_packets < 10:
+                        process = f"{process}_low_vol"
                     
                     # Create event with network-to-host mapping
                     event = {
@@ -671,7 +678,7 @@ def parse_cic_ids2017_csv(input_dir):
                         'action': 'network_flow',
                         'filepath': filepath,
                         'process': process,
-                        'user': str(int(user) if user.isdigit() else hash(user) % 1000),
+                        'user': str(hash(f"{src_ip}_{dst_ip}") % 1000),  # Use IP hash for user variation
                         'label': label,
                         'timestamp': timestamp_base,
                         'hour': hour,
