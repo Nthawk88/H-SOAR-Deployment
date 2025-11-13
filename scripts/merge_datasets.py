@@ -8,7 +8,15 @@ import sys
 import os
 from pathlib import Path
 
-def merge_datasets(input_files, output_file, skip_dedup=False, dedup_malicious=False):
+def merge_datasets(
+    input_files,
+    output_file,
+    skip_dedup=False,
+    dedup_malicious=False,
+    dedup_benign=False,
+    balance_labels=False,
+    balance_random_state=42,
+):
     """Merge multiple CSV datasets into one
     
     Args:
@@ -148,17 +156,61 @@ def merge_datasets(input_files, output_file, skip_dedup=False, dedup_malicious=F
                     print(f"  Malicious samples before: {before_malicious}")
                     print(f"  Malicious duplicates removed: {malicious_dedup_removed}")
                 merged_df = pd.concat([others_df, malicious_df], ignore_index=True)
+
+        benign_dedup_removed = 0
+        if dedup_benign:
+            if 'label' not in merged_df.columns:
+                print("\n⚠️  Cannot deduplicate benign samples: no 'label' column present.")
+            else:
+                feature_columns = [col for col in merged_df.columns if col != 'label']
+                benign_mask = merged_df['label'] == 'benign'
+                benign_df = merged_df[benign_mask]
+                others_df = merged_df[~benign_mask]
+                before_benign = len(benign_df)
+                benign_df = benign_df.drop_duplicates(subset=feature_columns + ['label'])
+                benign_dedup_removed = before_benign - len(benign_df)
+                if benign_dedup_removed > 0:
+                    print(f"\nRemoving duplicates specifically from benign samples...")
+                    print(f"  Benign samples before: {before_benign}")
+                    print(f"  Benign duplicates removed: {benign_dedup_removed}")
+                merged_df = pd.concat([others_df, benign_df], ignore_index=True)
+
+        balanced_removed = 0
+        if balance_labels:
+            if 'label' not in merged_df.columns:
+                print("\n⚠️  Cannot balance labels: no 'label' column present.")
+            else:
+                label_counts = merged_df['label'].value_counts()
+                min_count = label_counts.min()
+                if min_count == 0:
+                    print("\n⚠️  Cannot balance labels: one of the classes is empty.")
+                else:
+                    print("\nBalancing label counts...")
+                    print(f"  Current counts: {label_counts.to_dict()}")
+                    balanced_frames = []
+                    for label, count in label_counts.items():
+                        label_df = merged_df[merged_df['label'] == label]
+                        if count > min_count:
+                            balanced_removed += count - min_count
+                            label_df = label_df.sample(min_count, random_state=balance_random_state)
+                        balanced_frames.append(label_df)
+                    merged_df = pd.concat(balanced_frames, ignore_index=True)
+                    print(f"  Balanced to {min_count} samples per label")
         
         # Save merged dataset
         os.makedirs(os.path.dirname(output_file) if os.path.dirname(output_file) else '.', exist_ok=True)
         merged_df.to_csv(output_file, index=False)
         
         print(f"\n✅ Merged dataset saved to: {output_file}")
-        total_removed = duplicates_removed + malicious_dedup_removed
+        total_removed = duplicates_removed + malicious_dedup_removed + benign_dedup_removed + balanced_removed
         print(f"   Total samples: {len(merged_df)}")
         print(f"   Duplicates removed: {total_removed}")
         if malicious_dedup_removed > 0:
             print(f"   (Including {malicious_dedup_removed} malicious duplicates)")
+        if benign_dedup_removed > 0:
+            print(f"   (Including {benign_dedup_removed} benign duplicates)")
+        if balance_labels and balanced_removed > 0:
+            print(f"   (Removed {balanced_removed} samples to balance labels)")
         
         # Show label distribution
         if 'label' in merged_df.columns:
@@ -184,10 +236,12 @@ def merge_datasets(input_files, output_file, skip_dedup=False, dedup_malicious=F
 
 def main():
     if len(sys.argv) < 3:
-        print("Usage: python merge_datasets.py <output_file> <input_file1> [input_file2] ... [--no-dedup] [--dedup-malicious]")
+        print("Usage: python merge_datasets.py <output_file> <input_file1> [input_file2] ... [--no-dedup] [--dedup-malicious] [--dedup-benign] [--balance]")
         print("\nOptions:")
         print("  --no-dedup    Skip duplicate removal (keep all samples)")
         print("  --dedup-malicious  Remove duplicates only from malicious samples (can be combined with --no-dedup)")
+        print("  --dedup-benign     Remove duplicates only from benign samples")
+        print("  --balance          Down-sample each label to the smallest class size")
         print("\nExamples:")
         print("  python merge_datasets.py data/training_dataset.csv \\")
         print("    data/training_dataset_adfa.csv \\")
@@ -208,11 +262,26 @@ def main():
     dedup_malicious = '--dedup-malicious' in args
     if dedup_malicious:
         args.remove('--dedup-malicious')
+
+    dedup_benign = '--dedup-benign' in args
+    if dedup_benign:
+        args.remove('--dedup-benign')
+
+    balance_labels = '--balance' in args
+    if balance_labels:
+        args.remove('--balance')
     
     output_file = args[0]
     input_files = args[1:]
     
-    success = merge_datasets(input_files, output_file, skip_dedup=skip_dedup, dedup_malicious=dedup_malicious)
+    success = merge_datasets(
+        input_files,
+        output_file,
+        skip_dedup=skip_dedup,
+        dedup_malicious=dedup_malicious,
+        dedup_benign=dedup_benign,
+        balance_labels=balance_labels,
+    )
     
     if success:
         print("\nNext steps:")
