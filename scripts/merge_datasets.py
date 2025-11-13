@@ -8,7 +8,7 @@ import sys
 import os
 from pathlib import Path
 
-def merge_datasets(input_files, output_file, skip_dedup=False):
+def merge_datasets(input_files, output_file, skip_dedup=False, dedup_malicious=False):
     """Merge multiple CSV datasets into one
     
     Args:
@@ -98,33 +98,31 @@ def merge_datasets(input_files, output_file, skip_dedup=False):
             # Strategy: Remove duplicates within each original dataset first,
             # then merge, then optionally remove cross-dataset duplicates
             print(f"  Removing duplicates within each source dataset first...")
-            deduped_by_source = []
+            deduped_dataframes = []
+            within_duplicates = 0
             for i, df in enumerate(aligned_dataframes, 1):
-                source_name = f"dataset_{i}"
-                initial_source = len(df)
-                df_deduped = df.drop_duplicates(keep='first')
-                removed_source = initial_source - len(df_deduped)
-                if removed_source > 0:
-                    print(f"    {source_name}: Removed {removed_source} duplicates ({removed_source/initial_source*100:.1f}%)")
-                deduped_by_source.append(df_deduped)
+                before = len(df)
+                df_dedup = df.drop_duplicates()
+                after = len(df_dedup)
+                removed = before - after
+                within_duplicates += removed
+                dataset_name = f"dataset_{i}"
+                print(f"    {dataset_name}: Removed {removed} duplicates ({removed/before*100 if before else 0:.1f}%)")
+                deduped_dataframes.append(df_dedup)
             
-            # Merge deduplicated datasets
-            merged_df = pd.concat(deduped_by_source, ignore_index=True)
-            after_within_dedup = len(merged_df)
-            
-            # Now remove cross-dataset duplicates (only if ALL columns including label are identical)
+            merged_df = pd.concat(deduped_dataframes, ignore_index=True)
+            after_within = len(merged_df)
             print(f"  Removing cross-dataset duplicates (only if ALL columns identical)...")
-            before_cross = len(merged_df)
-            merged_df = merged_df.drop_duplicates(keep='first')
-            cross_removed = before_cross - len(merged_df)
-            
-            duplicates_removed = initial_count - len(merged_df)
+            merged_df_dedup = merged_df.drop_duplicates()
+            cross_duplicates = after_within - len(merged_df_dedup)
+            merged_df = merged_df_dedup
+            duplicates_removed = within_duplicates + cross_duplicates
             
             print(f"  Initial samples: {initial_count}")
-            print(f"  After within-dataset deduplication: {after_within_dedup}")
+            print(f"  After within-dataset deduplication: {after_within}")
             print(f"  After cross-dataset deduplication: {len(merged_df)}")
-            print(f"  Within-dataset duplicates removed: {initial_count - after_within_dedup}")
-            print(f"  Cross-dataset duplicates removed: {cross_removed}")
+            print(f"  Within-dataset duplicates removed: {within_duplicates}")
+            print(f"  Cross-dataset duplicates removed: {cross_duplicates}")
             print(f"  Total duplicates removed: {duplicates_removed}")
             
             if duplicates_removed > initial_count * 0.5:
@@ -133,13 +131,34 @@ def merge_datasets(input_files, output_file, skip_dedup=False):
                 print(f"  Consider using --no-dedup flag to keep all samples for training.")
                 print(f"  Or check datasets with: python scripts/debug_merge.py <file1> <file2>")
         
+        malicious_dedup_removed = 0
+        if dedup_malicious:
+            if 'label' not in merged_df.columns:
+                print("\n⚠️  Cannot deduplicate malicious samples: no 'label' column present.")
+            else:
+                feature_columns = [col for col in merged_df.columns if col != 'label']
+                malicious_mask = merged_df['label'] == 'malicious'
+                malicious_df = merged_df[malicious_mask]
+                others_df = merged_df[~malicious_mask]
+                before_malicious = len(malicious_df)
+                malicious_df = malicious_df.drop_duplicates(subset=feature_columns + ['label'])
+                malicious_dedup_removed = before_malicious - len(malicious_df)
+                if malicious_dedup_removed > 0:
+                    print(f"\nRemoving duplicates specifically from malicious samples...")
+                    print(f"  Malicious samples before: {before_malicious}")
+                    print(f"  Malicious duplicates removed: {malicious_dedup_removed}")
+                merged_df = pd.concat([others_df, malicious_df], ignore_index=True)
+        
         # Save merged dataset
         os.makedirs(os.path.dirname(output_file) if os.path.dirname(output_file) else '.', exist_ok=True)
         merged_df.to_csv(output_file, index=False)
         
         print(f"\n✅ Merged dataset saved to: {output_file}")
+        total_removed = duplicates_removed + malicious_dedup_removed
         print(f"   Total samples: {len(merged_df)}")
-        print(f"   Duplicates removed: {duplicates_removed}")
+        print(f"   Duplicates removed: {total_removed}")
+        if malicious_dedup_removed > 0:
+            print(f"   (Including {malicious_dedup_removed} malicious duplicates)")
         
         # Show label distribution
         if 'label' in merged_df.columns:
@@ -165,9 +184,10 @@ def merge_datasets(input_files, output_file, skip_dedup=False):
 
 def main():
     if len(sys.argv) < 3:
-        print("Usage: python merge_datasets.py <output_file> <input_file1> [input_file2] ... [--no-dedup]")
+        print("Usage: python merge_datasets.py <output_file> <input_file1> [input_file2] ... [--no-dedup] [--dedup-malicious]")
         print("\nOptions:")
         print("  --no-dedup    Skip duplicate removal (keep all samples)")
+        print("  --dedup-malicious  Remove duplicates only from malicious samples (can be combined with --no-dedup)")
         print("\nExamples:")
         print("  python merge_datasets.py data/training_dataset.csv \\")
         print("    data/training_dataset_adfa.csv \\")
@@ -184,11 +204,15 @@ def main():
     skip_dedup = '--no-dedup' in args
     if skip_dedup:
         args.remove('--no-dedup')
+
+    dedup_malicious = '--dedup-malicious' in args
+    if dedup_malicious:
+        args.remove('--dedup-malicious')
     
     output_file = args[0]
     input_files = args[1:]
     
-    success = merge_datasets(input_files, output_file, skip_dedup=skip_dedup)
+    success = merge_datasets(input_files, output_file, skip_dedup=skip_dedup, dedup_malicious=dedup_malicious)
     
     if success:
         print("\nNext steps:")
