@@ -321,6 +321,9 @@ def parse_lid_ds_2021(input_dir):
                                     # Skip other syscalls to focus on file/process operations
                                     continue
                                 
+                                # Extract PID from parts
+                                pid = int(parts[4]) if len(parts) > 4 and parts[4].isdigit() else hash(f"{process_name}_{filepath}") % 10000
+                                
                                 # Add timestamp variation from system call timestamp
                                 timestamp = int(parts[0]) if len(parts) > 0 and parts[0].isdigit() else hash(f"{process_name}_{filepath}") % 1000000000000
                                 hour = (timestamp // 1000000000000) % 24 if timestamp > 1000000000000 else hash(f"{process_name}_{filepath}") % 24
